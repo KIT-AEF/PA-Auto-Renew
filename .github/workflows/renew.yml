@@ -1,0 +1,22 @@
+name: Auto Renew
+on:
+  schedule:
+    - cron: '0 12 1,16 * *' # يعمل في اليوم 1 و 16 من كل شهر
+  workflow_dispatch: # للتشغيل اليدوي
+
+jobs:
+  renew:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4
+      - name: Run script
+        env:
+          ACCOUNTS_JSON: ${{ secrets.ACCOUNTS_JSON }}
+          PA_PASSWORD: ${{ secrets.PA_PASSWORD }}
+        run: python renew.py
