@@ -5,12 +5,11 @@ import requests
 import time
 from bs4 import BeautifulSoup
 
-# قراءة الحسابات من المتغير المجمع
+# قراءة الحسابات من المتغير
 ACCOUNTS_JSON = os.environ.get('ACCOUNTS_JSON')
-PASSWORD = os.environ.get('PA_PASSWORD')
 
-if not ACCOUNTS_JSON or not PASSWORD:
-    print("❌ Error: ACCOUNTS_JSON and PA_PASSWORD must be set")
+if not ACCOUNTS_JSON:
+    print("❌ Error: ACCOUNTS_JSON must be set")
     sys.exit(1)
 
 accounts = json.loads(ACCOUNTS_JSON)
@@ -62,7 +61,8 @@ def renew_account(username, password):
         return False
 
 if __name__ == "__main__":
-    for user in accounts:
-        renew_account(user, PASSWORD)
+    for acc in accounts:
+        print(f"--- Processing {acc['username']} ---")
+        renew_account(acc['username'], acc['password'])
         time.sleep(10) # راحة بين الحسابات
     sys.exit(0)
