@@ -1,76 +1,68 @@
 import os
+import sys
 import json
 import requests
 import time
 from bs4 import BeautifulSoup
 
-# قراءة البيانات من متغيرات البيئة (GitHub Secrets)
-accounts_json = os.environ.get('ACCOUNTS_JSON')
-password = os.environ.get('PA_PASSWORD')
+# قراءة الحسابات من المتغير المجمع
+ACCOUNTS_JSON = os.environ.get('ACCOUNTS_JSON')
+PASSWORD = os.environ.get('PA_PASSWORD')
 
-if not accounts_json or not password:
-    print("❌ خطأ: تأكد من إعداد ACCOUNTS_JSON و PA_PASSWORD في الـ GitHub Secrets")
-    exit(1)
+if not ACCOUNTS_JSON or not PASSWORD:
+    print("❌ Error: ACCOUNTS_JSON and PA_PASSWORD must be set")
+    sys.exit(1)
 
-accounts = json.loads(accounts_json)
+accounts = json.loads(ACCOUNTS_JSON)
 
 def renew_account(username, password):
+    LOGIN_URL = "https://www.pythonanywhere.com/login/"
+    DASHBOARD_URL = f"https://www.pythonanywhere.com/user/{username}/webapps/"
+    
     session = requests.Session()
-    session.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'})
+    session.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
     
     try:
-        # 1. الدخول لصفحة تسجيل الدخول
-        login_url = "https://www.pythonanywhere.com/login/"
-        response = session.get(login_url)
-        soup = BeautifulSoup(response.content, 'html.parser')
+        print(f"🔐 Logging in as {username}...")
+        login_page = session.get(LOGIN_URL, timeout=10)
+        soup = BeautifulSoup(login_page.content, 'html.parser')
         csrf_token = soup.find('input', {'name': 'csrfmiddlewaretoken'})['value']
         
-        # 2. إرسال بيانات الدخول
-        payload = {
-            'csrfmiddlewaretoken': csrf_token,
-            'auth-username': username,
-            'auth-password': password,
-            'login_view-current_step': 'auth'
-        }
+        payload = {'csrfmiddlewaretoken': csrf_token, 'auth-username': username, 'auth-password': password, 'login_view-current_step': 'auth'}
         
-        res = session.post(login_url, data=payload, headers={'Referer': login_url})
+        response = session.post(LOGIN_URL, data=payload, headers={'Referer': LOGIN_URL}, timeout=10, allow_redirects=True)
         
-        # التحقق من نجاح الدخول
-        if "Log out" not in res.text and "logout" not in res.text.lower():
-            print(f"❌ فشل تسجيل الدخول للحساب: {username}")
-            return
+        if "Log out" not in response.text:
+            print(f"❌ Login failed for {username}")
+            return False
             
-        print(f"✅ تم تسجيل الدخول لـ {username}")
-        
-        # 3. الذهاب لصفحة الويب أبس
-        dashboard_url = f"https://www.pythonanywhere.com/user/{username}/webapps/"
-        dashboard = session.get(dashboard_url)
+        print(f"✅ Login successful for {username}")
+        dashboard = session.get(DASHBOARD_URL, timeout=10)
         soup = BeautifulSoup(dashboard.content, 'html.parser')
         
-        # 4. البحث عن زر التمديد
-        extend_form = soup.find('form', action=lambda x: x and '/extend' in x)
+        forms = soup.find_all('form', action=True)
+        extend_action = next((form.get('action') for form in forms if "/extend" in form.get('action', '').lower()), None)
         
-        if not extend_form:
-            print(f"ℹ️ الحساب {username} لا يحتاج تمديد حالياً.")
-            return
-            
-        # 5. تنفيذ التمديد
-        extend_url = f"https://www.pythonanywhere.com{extend_form['action']}"
-        csrf_token = soup.find('input', {'name': 'csrfmiddlewaretoken'})['value']
+        if not extend_action:
+            print(f"ℹ️ No extend button found for {username}")
+            return True
         
-        result = session.post(extend_url, data={'csrfmiddlewaretoken': csrf_token}, headers={'Referer': dashboard_url})
+        dashboard_csrf = soup.find('input', {'name': 'csrfmiddlewaretoken'})['value']
+        extend_url = f"https://www.pythonanywhere.com{extend_action}"
         
-        if result.status_code == 200:
-            print(f"🎉 تم تمديد الحساب {username} بنجاح!")
-        else:
-            print(f"❌ حدث خطأ أثناء تمديد {username}")
+        result = session.post(extend_url, data={'csrfmiddlewaretoken': dashboard_csrf}, headers={'Referer': DASHBOARD_URL}, timeout=10)
+        
+        if result.status_code == 200 and "webapps" in result.url.lower():
+            print(f"✅ Web app for {username} extended successfully!")
+            return True
+        return False
             
     except Exception as e:
-        print(f"⚠️ خطأ غير متوقع أثناء معالجة {username}: {e}")
+        print(f"❌ Error processing {username}: {e}")
+        return False
 
 if __name__ == "__main__":
-    print(f"🚀 بدء عملية التمديد لـ {len(accounts)} حساب...")
     for user in accounts:
-        renew_account(user, password)
-        time.sleep(10) # تأخير 10 ثوانٍ بين كل حساب
-    print("🏁 انتهت المهمة.")
+        renew_account(user, PASSWORD)
+        time.sleep(10) # راحة بين الحسابات
+    sys.exit(0)
